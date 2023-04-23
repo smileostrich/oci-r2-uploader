@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
-use sha2::{Digest, Sha256};
+use blake3::Hasher;
 use tempfile::TempDir;
 use serde_json::Value;
 
@@ -59,8 +59,8 @@ pub async fn run(image: String, tag: String) -> Result<()> {
             &image_blobs_dir
         };
 
-        let sha = compute_sha256(&src)?;
-        let dst = dst_dir.join(sha);
+        let blake = compute_blake3(&src)?;
+        let dst = dst_dir.join(blake);
         fs::rename(&src, &dst)?;
     }
 
@@ -149,9 +149,9 @@ fn check_command_installed(cmd: &str) -> Result<()> {
     Ok(())
 }
 
-fn compute_sha256<P: AsRef<Path>>(path: P) -> Result<String> {
+fn compute_blake3<P: AsRef<Path>>(path: P) -> Result<String> {
     let mut file = fs::File::open(path)?;
-    let mut sha = Sha256::new();
+    let mut hasher = Hasher::new();
     let mut buffer = [0; 4096];
     loop {
         let bytes = file.read(&mut buffer)?;
@@ -159,8 +159,8 @@ fn compute_sha256<P: AsRef<Path>>(path: P) -> Result<String> {
             break;
         }
 
-        sha.update(&buffer[..bytes]);
+        hasher.update(&buffer[..bytes]);
     }
 
-    Ok(format!("{:x}", sha.finalize()))
+    Ok(hasher.finalize().to_hex().to_string())
 }

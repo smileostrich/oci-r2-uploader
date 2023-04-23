@@ -14,7 +14,7 @@ Add the following dependency to your `Cargo.toml` file:
 
 ```toml
 [dependencies]
-docker-r2-uploader = "0.1.0"
+oci-r2-uploader = "0.1.0"
 ```
 
 ## Prerequisites
@@ -33,7 +33,7 @@ async fn main() {
     let image = String::from("my_image");
     let tag = String::from("my_tag");
 
-    if let Err(e) = docker_r2_uploader::run(image, tag).await {
+    if let Err(e) = oci_r2_uploader::run(image, tag).await {
     }
 }
 ```
