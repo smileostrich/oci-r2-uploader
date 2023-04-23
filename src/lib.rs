@@ -1,14 +1,11 @@
-use std::env;
+mod r2configs;
+mod v2;
+mod hash_utils;
+
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
 use anyhow::{bail, Context, Result};
-use blake3::Hasher;
-use rusoto_core::Region;
-use rusoto_s3::{PutObjectRequest, S3Client, S3};
-use serde_json::Value;
 use tempfile::TempDir;
 
 pub async fn run(image: String, tag: String) -> Result<()> {
@@ -17,7 +14,7 @@ pub async fn run(image: String, tag: String) -> Result<()> {
 
     check_skopeo("skopeo")?;
 
-    let env_vars = get_required_environment_variables()?;
+    let env_vars = r2configs::parse_r2configs()?;
 
     let status = convert_oci(&image, &tag, &tmp_dir)?;
     if !status.success() {
@@ -28,11 +25,11 @@ pub async fn run(image: String, tag: String) -> Result<()> {
 
     move_files(&tmp_dir, &image_manifests_dir, &image_blobs_dir)?;
 
-    let client = prepare_s3_client(&env_vars)?;
+    let client = v2::s3_upload::prepare_s3_client(&env_vars)?;
 
-    upload_blobs(&image, &image_blobs_dir, &client, &env_vars.r2_bucket).await?;
+    v2::s3_upload::upload_blobs(&image, &image_blobs_dir, &client, &env_vars.r2_bucket).await?;
 
-    upload_manifests(&image, &image_manifests_dir, &client, &env_vars.r2_bucket).await?;
+    v2::s3_upload::upload_manifests(&image, &image_manifests_dir, &client, &env_vars.r2_bucket).await?;
 
     cleanup(tmp_dir, &script_dir, &image)?;
 
@@ -45,43 +42,6 @@ fn check_skopeo(cmd: &str) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn compute_blake3<P: AsRef<Path>>(path: P) -> Result<String> {
-    let mut file = fs::File::open(path)?;
-    let mut hasher = Hasher::new();
-    let mut buffer = [0; 4096];
-    loop {
-        let bytes = file.read(&mut buffer)?;
-        if bytes == 0 {
-            break;
-        }
-
-        hasher.update(&buffer[..bytes]);
-    }
-
-    Ok(hasher.finalize().to_hex().to_string())
-}
-
-struct R2Configs {
-    cloudflare_account_id: String,
-    r2_bucket: String,
-    r2_access_key_id: String,
-    r2_secret_access_key: String,
-}
-
-fn get_required_environment_variables() -> Result<R2Configs> {
-    let cloudflare_account_id = env::var("CLOUDFLARE_ACCOUNT_ID").context("CLOUDFLARE_ACCOUNT_ID is not set")?;
-    let r2_bucket = env::var("R2_BUCKET").context("R2_BUCKET is not set")?;
-    let r2_access_key_id = env::var("R2_ACCESS_KEY_ID").context("R2_ACCESS_KEY_ID is not set")?;
-    let r2_secret_access_key = env::var("R2_SECRET_ACCESS_KEY").context("R2_SECRET_ACCESS_KEY is not set")?;
-
-    Ok(R2Configs {
-        cloudflare_account_id,
-        r2_bucket,
-        r2_access_key_id,
-        r2_secret_access_key,
-    })
 }
 
 fn convert_oci(image: &str, tag: &str, tmp_dir: &TempDir) -> Result<std::process::ExitStatus> {
@@ -122,79 +82,10 @@ fn move_files(tmp_dir: &TempDir, image_manifests_dir: &Path, image_blobs_dir: &P
             &image_blobs_dir
         };
 
-        let hash = compute_blake3(&src)?;
+        let hash = hash_utils::compute_blake3(&src)?;
         let dst = dst_dir.join(hash);
 
         fs::rename(&src, &dst)?;
-    }
-
-    Ok(())
-}
-
-fn prepare_s3_client(env_vars: &R2Configs) -> Result<S3Client> {
-    let s3_endpoint = format!("https://{}.r2.cloudflarestorage.com", env_vars.cloudflare_account_id);
-
-    let region = Region::Custom {
-        name: "auto".to_owned(),
-        endpoint: s3_endpoint,
-    };
-
-    Ok(S3Client::new_with(
-        rusoto_core::HttpClient::new().expect("failed to create request dispatcher"),
-        rusoto_core::credential::StaticProvider::new_minimal(
-            env_vars.r2_access_key_id.clone(),
-            env_vars.r2_secret_access_key.clone(),
-        ),
-        region,
-    ))
-}
-
-async fn upload_blobs(image: &str, image_blobs_dir: &Path, client: &S3Client, r2_bucket: &str) -> Result<()> {
-    for entry in fs::read_dir(&image_blobs_dir)? {
-        let entry = entry?;
-        let blob = entry.path();
-        let blob_name = blob.file_name().unwrap().to_str().unwrap();
-
-        let key = format!("v2/{}/blobs/{}", image, blob_name);
-        let blob_data = fs::read(blob.clone())?;
-
-        let req = PutObjectRequest {
-            bucket: r2_bucket.to_owned(),
-            key: key.clone(),
-            body: Some(blob_data.into()),
-            content_type: Some("application/octet-stream".to_owned()),
-            ..Default::default()
-        };
-
-        client.put_object(req).await.context(format!("Failed to upload blob {}", blob_name))?;
-        log::info!("Uploaded blob {}", blob_name);
-    }
-
-    Ok(())
-}
-
-async fn upload_manifests(image: &str, image_manifests_dir: &Path, client: &S3Client, r2_bucket: &str) -> Result<()> {
-    for entry in fs::read_dir(&image_manifests_dir)? {
-        let entry = entry?;
-        let manifest = entry.path();
-        let manifest_name = manifest.file_name().unwrap().to_str().unwrap();
-
-        let manifest_data = fs::read_to_string(&manifest)?;
-        let manifest_json: Value = serde_json::from_str(&manifest_data)?;
-        let content_type = manifest_json["mediaType"].as_str().unwrap().to_owned();
-
-        let key = format!("v2/{}/manifests/{}", image, manifest_name);
-
-        let req = PutObjectRequest {
-            bucket: r2_bucket.to_owned(),
-            key: key.clone(),
-            body: Some(manifest_data.into_bytes().into()),
-            content_type: Some(content_type),
-            ..Default::default()
-        };
-
-        client.put_object(req).await.context(format!("Failed to upload manifest {}", manifest_name))?;
-        log::info!("Uploaded manifest {}", manifest_name);
     }
 
     Ok(())

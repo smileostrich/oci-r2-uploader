@@ -1,6 +1,6 @@
 [package]
 name = "oci-r2-uploader"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Ilmin Moon <ian.ilminmoon@gmail.com>"]
 edition = "2021"
 description = "Rust library for converting and uploading Docker images to Cloudflare R2 Storage with customizable image and tag parameters."

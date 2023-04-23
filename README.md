@@ -14,7 +14,7 @@ Add the following dependency to your `Cargo.toml` file:
 
 ```toml
 [dependencies]
-oci-r2-uploader = "0.1.1"
+oci-r2-uploader = "0.1.2"
 ```
 
 ## Prerequisites
@@ -35,7 +35,6 @@ oci-r2-uploader = "0.1.1"
 
 ```rust
 use oci_r2_uploader;
-use anyhow::Result;
 
 #[tokio::main]
 async fn main() {
