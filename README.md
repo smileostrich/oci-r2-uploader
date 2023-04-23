@@ -14,7 +14,7 @@ Add the following dependency to your `Cargo.toml` file:
 
 ```toml
 [dependencies]
-oci-r2-uploader = "0.1.0"
+oci-r2-uploader = "0.1.1"
 ```
 
 ## Prerequisites
