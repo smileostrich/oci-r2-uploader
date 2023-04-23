@@ -22,6 +22,15 @@ oci-r2-uploader = "0.1.0"
 - Install `skopeo` on your system. Follow the [official installation instructions](https://github.com/containers/skopeo/blob/main/install.md) for your specific platform.
   (if you are using macOS, you can install it with `brew install skopeo`)
 
+- You need to set the following environment variables:
+  ```bash
+  export CLOUDFLARE_ACCOUNT_ID=account_id
+  export R2_ACCESS_KEY_ID=access_key
+  export R2_SECRET_ACCESS_KEY=secret_key
+  export R2_BUCKET=my_bucket
+  ```
+
+
 ## Usage
 
 ```rust
