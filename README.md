@@ -17,6 +17,11 @@ Add the following dependency to your `Cargo.toml` file:
 docker-r2-uploader = "0.1.0"
 ```
 
+## Prerequisites
+
+- Install `skopeo` on your system. Follow the [official installation instructions](https://github.com/containers/skopeo/blob/main/install.md) for your specific platform.
+  (if you are using macOS, you can install it with `brew install skopeo`)
+
 ## Usage
 
 ```rust
@@ -25,8 +30,8 @@ use anyhow::Result;
 
 #[tokio::main]
 async fn main() {
-let image = String::from("my_image");
-let tag = String::from("my_tag");
+    let image = String::from("my_image");
+    let tag = String::from("my_tag");
 
     if let Err(e) = docker_r2_uploader::run(image, tag).await {
     }
