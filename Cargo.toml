@@ -5,7 +5,7 @@ authors = ["Ilmin Moon <ian.ilminmoon@gmail.com>"]
 edition = "2021"
 description = "Rust library for converting and uploading Docker images to Cloudflare R2 Storage with customizable image and tag parameters."
 license = "MIT"
-repository = "https://github.com/yourusername/your-repo.git"
+repository = "https://github.com/smileostrich/oci-r2-uploader.git"
 
 [dependencies]
 anyhow = "1.0"
